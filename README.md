@@ -5,6 +5,8 @@ Travaux d'expertise halieutique dans le cadre de révision des données pour l'�
 
 Validation de données débarquées entre SACROIS/Marées-Ventes
 
+## SACROIS - data subset
+Manche > Douarn_out > Port retour > Gear % > corrected Metiers > Land/month/Y
 
 
 
