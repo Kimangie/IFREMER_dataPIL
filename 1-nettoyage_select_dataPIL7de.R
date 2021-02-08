@@ -219,8 +219,22 @@ land_lieu <- ddply(NewF.7de_2000,c("port_ret"), summarise,
 land_lieu <- land_lieu %>%
               arrange(desc(sum_qt))
 t <- dplyr::slice(land_lieu, 1:5)
+qplot(port_ret, sum_qt, data=t,
+      geom = "bar", weight= sum_qt,
+      ylab = "landings (kg)",
+      xlab = "landing port",
+      ylim = c(0, 60e+06))
+
 ggplot(t,aes(x=port_ret,y=sum_qt))+
-  geom_bar(stat="identity")
+  geom_bar(stat="identity") + ylim(0, 60e+06) + 
+  xlab("Landing port") + ylab("Landings (kg)") +
+  theme_bw() +
+  theme(axis.title.x = element_text(size=16), axis.title.y = element_text(size=16),
+        axis.text.x = element_text(face="bold", color="#1a0730", 
+                                   size=14, angle=0),
+        axis.text.y = element_text(face="bold", color="#05000a", 
+                                   size=14, angle=45))
+        
 #
 land_lieu <- ddply(NewF.7de_2010,c("port_ret"), summarise,
                    N_port = length(port_ret), 
@@ -228,8 +242,16 @@ land_lieu <- ddply(NewF.7de_2010,c("port_ret"), summarise,
 land_lieu <- land_lieu %>%
   arrange(desc(sum_qt))
 t <- dplyr::slice(land_lieu, 1:5)
+
 ggplot(t,aes(x=port_ret,y=sum_qt))+
-  geom_bar(stat="identity")
+  geom_bar(stat="identity") + ylim(0, 60e+06) + 
+  xlab("Landing port") + ylab("Landings (kg)") +
+  theme_bw() +
+  theme(axis.title.x = element_text(size=16), axis.title.y = element_text(size=16),
+        axis.text.x = element_text(face="bold", color="#1a0730", 
+                                   size=14, angle=0),
+        axis.text.y = element_text(face="bold", color="#05000a", 
+                                   size=14, angle=45))
 
   ## Catch_by_gear before-after
 catch_g2000 <- ddply(NewF.7de_2000,c("ENGIN_COD_SACROIS"), summarise,
@@ -309,6 +331,8 @@ douarn_ym <- ddply(douarn, c("Year", "Month"), summarise,
 #### VENTES ##---------------------------------------------------------------------------------
 #~~ 7.de (-25E4/25E5) ####
 ventes <- read.csv("~/Data_extraction/ISIH-503343-donneesVente-20210118160841.txt", sep=";")
+#
+ventes.b <- read.csv("~/Data_extraction/ISIH-503343-donneesVente-20210203152138.txt", sep=";")
 
 ref_harb <- read_excel("~/Data_extraction/REF_PORT.xls")
 ventes_year <- merge(ventes, ref_harb, by.x = "LIEU_COD",by.y="Code_lieu", all.x=T)
@@ -351,17 +375,6 @@ ventes.dat <- merge(ventes.date, HH1, c("ID")) #merge HH1 in HH
 names(ventes.dat)
 anyDuplicated(ventes.dat) #0
 #--------------------------------------------------------------.
-#
-round(tapply(ventes.dat$SEQV_QUANT, 
-             list(ventes.dat$LIEU_COD, 
-                  ventes.dat$Year),sum, na.rm=TRUE),0)
-#
-Prod_in_harbour <- ddply(ventes_year, c("LIEU_COD"), summarise,
-                         N_port    = length(LIEU_COD), 
-                         land_kg = sum(SEQV_QUANT))    #51 ports 
-
-comp_sac_ventes <- merge(quant_port_ret, Prod_in_harbour, by.x = "port_ret", by.y="LIEU_COD", all.x=T)
-#
 ### /!\ doublons de certaines lignes - repeat "Port"xxx or "Criée"xxx
 table(ventes.dat$Lieu_libelle)
 #create empty vector of strings
@@ -380,17 +393,32 @@ table(ventes.dat$Libelle, ventes.dat$Lieu_libelle) #
 table(ventes.dat$LIEU_COD, ventes.dat$Libelle)
 # Total catch per cat check - Port to keep
 ventes_year <- ventes.dat %>%
-                  dplyr::filter(Libelle == "Port") #48,411
+  dplyr::filter(Libelle == "Port") #48,411
 # check total catch per year
 round(tapply(ventes_year$SEQV_QUANT, list(ventes_year$Year),sum, na.rm=TRUE),0)
 
 ventes_ym <- ddply(ventes_year, c("Year", "Month"), summarise,
+                   N_port    = length(LIEU_COD), 
+                   land_kg = sum(SEQV_QUANT))
+#-------------------------------------------------------------------.
+##### Comp sacrois/ventes - spot the diff #--------------------------------------------------------------------
+round(tapply(ventes_year$SEQV_QUANT, 
+             list(ventes_year$LIEU_COD, 
+                  ventes_year$Year),sum, na.rm=TRUE),0)
+#
+Prod_in_harbour <- ddply(ventes_year, c("LIEU_COD"), summarise,
                          N_port    = length(LIEU_COD), 
-                         land_kg = sum(SEQV_QUANT))
+                         land_kg = sum(SEQV_QUANT))    #51 ports 
+#combine with previous summarise quant in port return in SACROIS
+comp_sac_ventes <- merge(quant_port_ret, Prod_in_harbour, by.x = "port_ret", by.y="LIEU_COD", all.x=T)
+#
+comp_sac_ventes <- comp_sac_ventes %>% dplyr::filter(sum_qt > 50)
 
-#### Comp sacrois/ventes - spot the diff #----------------------------------------------------------
+
+
+
  #more NAVS in Sac7de than in ventes..
-nav_diff <- unique(Navs_sac[!Navs_sac %in% ventes_year$NAVS_COD]) #59 in sac, not in ventes
+nav_diff <- unique(Navs_sac[!Navs_sac %in% ventes_year$NAVS_COD]) #51 in sac, not in ventes
 
 NewF.7de %>%
   dplyr::filter(NAVS_COD %in% nav_diff) %>%
@@ -411,3 +439,74 @@ ventes_year %>%
 NewF.7de %>%
   dplyr::filter(NAVS_COD == c("726643") & Year == c("2005")) %>%
   dplyr::select(NAVS_COD, port_ret, rects, land_sac_kg, Year, Month)
+
+#### LOGBOOK  ##---------------------------------------------------------------------------------
+#~~ 7.de (-25E4/25E5) ####
+Logbook <- read.csv("~/Data_extraction/ISIH-503343-donneesMaree-20210106110539.txt", sep=";")
+Logbook2 <- read.csv("~/Data_extraction/ISIH-503343-donneesMaree-20210205125504.txt", sep=";")
+
+glimpse(Logbook)
+table(Logbook$SECT_COD, Logbook$LIEU_COD_RET)
+table(Logbook$ENGF_COD)
+
+#Correct LIEU_COD_RET / Vessels / gear
+Logbook_dt <- as.data.table(Logbook)
+#WAR ROAG III
+Logbook_dt[NAVS_COD %in% 898415 & SECT_COD %in% c("27","") & LIEU_COD_RET %in% "XDZ", c("SECT_COD") := list("25E5")]
+Logbook_dt[NAVS_COD %in% 898415 & SECT_COD %in% c("27","") & LIEU_COD_RET %in% c("XLO","XCC"), c("SECT_COD") := list("24E6")]
+Logbook_dt[NAVS_COD %in% 898415 & SECT_COD %in% c("27","") & LIEU_COD_RET %in% "AGV", c("SECT_COD") := list("24E5")]
+#Le NATIF II
+Logbook_dt[NAVS_COD %in% 719993 & SECT_COD %in% c("27",""), c("SECT_COD") := list("22E7")]
+#Logbook_dt[LIEU_COD_RET %in%"CRU" := list("ALS")]
+#
+Logbook_dt %>%
+  filter(LIEU_COD_RET %in% "XCC" & NAVS_COD %in% 898415) %>%
+  dplyr::select(NAVS_COD, SECT_COD, LIEU_COD_DEP, MAREE_DAT_DEP, ENGF_COD, CAPT_QTOT)
+
+Log7de <- Logbook_dt[SECT_COD %in% Area7 | LIEU_COD_RET %in% car] #9,229
+
+
+Log7de <- Log7de %>%
+  dplyr::select(MAREE_ID, NAVS_COD, TLIEU_COD_RET, LIEU_COD_RET, LIEU_COD_DEP, MAREE_DAT_DEP,MAREE_DAT_RET, MAREE_ORI_ID, MAREE_DUREE, PECHE_ID, ENGF_COD, SEQP_ID, SECT_COD, CAPT_ID:CAPT_QTOT)
+head(Log7de)
+
+round(tapply(Log7de$CAPT_QTOT, 
+             list(Log7de$SECT_COD, 
+                  Log7de$LIEU_COD_RET),sum, na.rm=TRUE),0)
+
+#rm XDZ
+Log7de <- Log7de %>%
+          filter(!LIEU_COD_RET %in% "XDZ")
+
+quant_port_mar <- ddply(Log7de,c("LIEU_COD_RET"), summarise,
+                        N_port = length(LIEU_COD_RET),
+                        sum = sum(CAPT_QTOT, na.rm=T))
+
+### Separate the date (with Maree_dat_dep) #------
+str(Log7de$MAREE_DAT_DEP)
+tmp <- matrix(unlist(strsplit(as.character(Log7de$MAREE_DAT_DEP), '/')), ncol=3, byrow=TRUE) #separe the date 
+
+HH1 <- Log7de$ID <-seq.int(nrow(Log7de))
+HH1 <- cbind(Log7de$ID, as.data.frame(tmp))
+
+names(HH1) <- c("ID", "Day", "Month", "Yhour") #renaming the columns
+str(HH1)
+maree.date <- merge(Log7de, HH1, c("ID")) #merge HH1 in HH
+names(maree.date)
+anyDuplicated(maree.date) #0 -but separate time also
+tmp <- matrix(unlist(strsplit(as.character(maree.date$Yhour), ' ')), ncol=2,
+              byrow=TRUE) 
+HH1 <- cbind(maree.date$ID, as.data.frame(tmp))
+names(HH1) <- c("ID", "Year", "Time")
+maree.dat <- merge(maree.date, HH1, c("ID")) #
+names(maree.dat)
+anyDuplicated(maree.dat) #0
+
+Log7de <- maree.dat
+
+round(tapply(Log7de$CAPT_QTOT, 
+             Log7de$Year,sum, na.rm=TRUE),0)
+
+
+Log7de %>%
+  filter(NAVS_COD == "726643" & Year == c(2005, 2009))
